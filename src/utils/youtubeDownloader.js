@@ -11,44 +11,85 @@ const __dirname = path.dirname(__filename);
 const ffmpegPath = ffmpegInstaller.path;
 
 // Common options for all youtube-dl operations
-const getCommonOptions = () => ({
-  noWarnings: true,
-  noCheckCertificates: true,
-  preferFreeFormats: true,
-  addHeader: [
-    'referer:https://www.youtube.com/',
-    'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'accept-language:en-US,en;q=0.9'
-  ],
-  // Retry options
-  retries: 3,
-  fragmentRetries: 3,
-  skipUnavailableFragments: true
-});
+const getCommonOptions = () => {
+  const options = {
+    noWarnings: true,
+    noCheckCertificates: true,
+    preferFreeFormats: true,
+    addHeader: [
+      'referer:https://www.youtube.com/',
+      'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'accept-language:en-US,en;q=0.9'
+    ],
+    // Use extractor args to bypass bot detection
+    extractorArgs: 'youtube:player_client=android,web;player_skip=webpage,configs',
+    // Retry options
+    retries: 3,
+    fragmentRetries: 3,
+    skipUnavailableFragments: true,
+    // Use OAuth2 to bypass restrictions
+    username: 'oauth2',
+    password: ''
+  };
+
+  // Add cookies if provided
+  if (process.env.YOUTUBE_COOKIES) {
+    options.cookies = process.env.YOUTUBE_COOKIES;
+  }
+
+  return options;
+};
 
 /**
  * Get video information without downloading
  */
 export const getVideoInfo = async (url) => {
-  try {
-    const options = {
+  // Try multiple methods to get video info
+  const methods = [
+    // Method 1: Android client (most reliable)
+    {
       ...getCommonOptions(),
-      dumpSingleJson: true
-    };
+      dumpSingleJson: true,
+      extractorArgs: 'youtube:player_client=android'
+    },
+    // Method 2: iOS client
+    {
+      ...getCommonOptions(),
+      dumpSingleJson: true,
+      extractorArgs: 'youtube:player_client=ios',
+      addHeader: [
+        'user-agent:com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)'
+      ]
+    },
+    // Method 3: Web client with embed
+    {
+      ...getCommonOptions(),
+      dumpSingleJson: true,
+      extractorArgs: 'youtube:player_client=web;player_skip=configs'
+    }
+  ];
 
-    console.log('🔍 Fetching video info...');
-    const info = await youtubedl(url, options);
+  for (let i = 0; i < methods.length; i++) {
+    try {
+      console.log(`🔍 Fetching video info (method ${i + 1})...`);
+      const info = await youtubedl(url, methods[i]);
 
-    return {
-      title: info.title,
-      duration: formatDuration(info.duration),
-      channel: info.uploader || info.channel || info.uploader_id,
-      thumbnail: info.thumbnail,
-      videoId: info.id
-    };
-  } catch (error) {
-    console.error('❌ Video info error:', error.message);
-    throw new Error(`Failed to fetch video info: ${error.message}`);
+      return {
+        title: info.title,
+        duration: formatDuration(info.duration),
+        channel: info.uploader || info.channel || info.uploader_id,
+        thumbnail: info.thumbnail,
+        videoId: info.id
+      };
+    } catch (error) {
+      console.error(`❌ Method ${i + 1} failed:`, error.message);
+      if (i === methods.length - 1) {
+        // Last method failed
+        throw new Error(`Failed to fetch video info: ${error.message}`);
+      }
+      // Try next method
+      continue;
+    }
   }
 };
 
@@ -77,25 +118,56 @@ export const downloadYouTubeVideo = async (url, type = 'video') => {
 
     console.log(`⬇️  Starting download: ${title}`);
 
-    // Configure download options
-    const downloadOptions = {
-      ...getCommonOptions(),
-      output: outputTemplate + '.%(ext)s',
-      ffmpegLocation: ffmpegPath
-    };
+    // Try multiple download methods
+    const downloadMethods = [
+      // Method 1: Android client (most reliable for bypassing bot detection)
+      {
+        ...getCommonOptions(),
+        output: outputTemplate + '.%(ext)s',
+        ffmpegLocation: ffmpegPath,
+        extractorArgs: 'youtube:player_client=android',
+        format: type === 'audio' ? 'bestaudio' : 'best[ext=mp4]/mp4',
+        extractAudio: type === 'audio',
+        audioFormat: type === 'audio' ? 'mp3' : undefined,
+        audioQuality: type === 'audio' ? 0 : undefined,
+        mergeOutputFormat: type === 'video' ? 'mp4' : undefined
+      },
+      // Method 2: iOS client fallback
+      {
+        ...getCommonOptions(),
+        output: outputTemplate + '.%(ext)s',
+        ffmpegLocation: ffmpegPath,
+        extractorArgs: 'youtube:player_client=ios',
+        format: type === 'audio' ? 'bestaudio' : 'best[ext=mp4]/mp4',
+        extractAudio: type === 'audio',
+        audioFormat: type === 'audio' ? 'mp3' : undefined,
+        audioQuality: type === 'audio' ? 0 : undefined,
+        mergeOutputFormat: type === 'video' ? 'mp4' : undefined,
+        addHeader: [
+          'user-agent:com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)'
+        ]
+      }
+    ];
 
-    if (type === 'audio') {
-      downloadOptions.extractAudio = true;
-      downloadOptions.audioFormat = 'mp3';
-      downloadOptions.audioQuality = 0;
-      downloadOptions.format = 'bestaudio';
-    } else {
-      downloadOptions.format = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/mp4';
-      downloadOptions.mergeOutputFormat = 'mp4';
+    // Try download methods
+    let downloadSuccess = false;
+    for (let i = 0; i < downloadMethods.length; i++) {
+      try {
+        console.log(`📥 Attempting download method ${i + 1}...`);
+        await youtubedl(url, downloadMethods[i]);
+        downloadSuccess = true;
+        break;
+      } catch (error) {
+        console.error(`❌ Download method ${i + 1} failed:`, error.message);
+        if (i === downloadMethods.length - 1) {
+          throw error;
+        }
+      }
     }
 
-    // Download the video
-    await youtubedl(url, downloadOptions);
+    if (!downloadSuccess) {
+      throw new Error('All download methods failed');
+    }
 
     // Find the downloaded file
     const files = fs.readdirSync(downloadsDir);
