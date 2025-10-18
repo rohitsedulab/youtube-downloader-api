@@ -11,6 +11,38 @@ const __dirname = path.dirname(__filename);
 // Set ffmpeg path
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
+// Create agent with cookies to bypass rate limiting
+const agent = ytdl.createAgent([
+  {
+    "domain": ".youtube.com",
+    "expirationDate": 1759633298.163287,
+    "hostOnly": false,
+    "httpOnly": false,
+    "name": "PREF",
+    "path": "/",
+    "sameSite": "unspecified",
+    "secure": true,
+    "session": false,
+    "storeId": "0",
+    "value": "tz=Asia.Calcutta"
+  }
+]);
+
+// Common options for ytdl
+const getYtdlOptions = () => ({
+  agent,
+  requestOptions: {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1'
+    }
+  }
+});
+
 /**
  * Get video information without downloading
  */
@@ -18,7 +50,7 @@ export const getVideoInfo = async (url) => {
   try {
     console.log('🔍 Fetching video info...');
     
-    const info = await ytdl.getInfo(url);
+    const info = await ytdl.getInfo(url, getYtdlOptions());
     
     return {
       title: info.videoDetails.title,
@@ -29,6 +61,12 @@ export const getVideoInfo = async (url) => {
     };
   } catch (error) {
     console.error('❌ Video info error:', error.message);
+    
+    // Handle rate limiting
+    if (error.message.includes('429')) {
+      throw new Error('YouTube rate limit reached. Please try again in a few minutes.');
+    }
+    
     throw new Error(`Failed to fetch video info: ${error.message}`);
   }
 };
@@ -63,6 +101,7 @@ export const downloadYouTubeVideo = async (url, type = 'video') => {
       if (type === 'audio') {
         // Download audio only
         const audioStream = ytdl(url, {
+          ...getYtdlOptions(),
           quality: 'highestaudio',
           filter: 'audioonly'
         });
@@ -81,11 +120,13 @@ export const downloadYouTubeVideo = async (url, type = 'video') => {
       } else {
         // Download video with audio
         const videoStream = ytdl(url, {
+          ...getYtdlOptions(),
           quality: 'highestvideo',
           filter: format => format.container === 'mp4'
         });
 
         const audioStream = ytdl(url, {
+          ...getYtdlOptions(),
           quality: 'highestaudio',
           filter: 'audioonly'
         });
@@ -106,6 +147,7 @@ export const downloadYouTubeVideo = async (url, type = 'video') => {
             console.log('🔄 Trying fallback method...');
             
             const fallbackStream = ytdl(url, {
+              ...getYtdlOptions(),
               quality: 'highest',
               filter: format => format.container === 'mp4' && format.hasVideo && format.hasAudio
             });
