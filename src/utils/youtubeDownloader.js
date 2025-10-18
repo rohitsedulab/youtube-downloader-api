@@ -1,6 +1,7 @@
 import ytdl from '@distube/ytdl-core';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -57,7 +58,7 @@ const createAgent = () => {
 
 const agent = createAgent();
 
-// Common options for ytdl with IPv6 support
+// Common options for ytdl with IPv6 and proxy support
 const getYtdlOptions = () => {
   const options = {
     agent,
@@ -77,6 +78,12 @@ const getYtdlOptions = () => {
       }
     }
   };
+
+  // Use proxy if provided (helps bypass rate limits)
+  if (process.env.PROXY_URL) {
+    console.log('🔄 Using proxy:', process.env.PROXY_URL.replace(/\/\/.*@/, '//***@'));
+    options.agent = new HttpsProxyAgent(process.env.PROXY_URL);
+  }
 
   // Use IPv6 if available (helps bypass rate limits)
   if (process.env.USE_IPV6 === 'true') {

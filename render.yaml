@@ -17,5 +17,7 @@ services:
         value: production
       - key: USE_IPV6
         value: "true"
+      - key: PROXY_URL
+        value: ""
       - key: YOUTUBE_COOKIES
         value: ""
