@@ -44,7 +44,16 @@ export const downloadVideo = async (req, res) => {
     const filePath = await downloadYouTubeVideo(url, downloadType);
 
     const filename = path.basename(filePath);
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    
+    // Auto-detect base URL from request or use environment variable
+    let baseUrl = process.env.BASE_URL;
+    
+    if (!baseUrl || baseUrl === 'http://localhost:3000') {
+      // Auto-detect from request headers
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host || req.get('host');
+      baseUrl = `${protocol}://${host}`;
+    }
 
     // URL encode the filename for proper handling of special characters
     const encodedFilename = encodeURIComponent(filename);
