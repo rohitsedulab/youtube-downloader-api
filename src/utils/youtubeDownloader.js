@@ -16,23 +16,13 @@ const getCommonOptions = () => {
     noWarnings: true,
     noCheckCertificates: true,
     preferFreeFormats: true,
-    addHeader: [
-      'referer:https://www.youtube.com/',
-      'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'accept-language:en-US,en;q=0.9'
-    ],
-    // Use extractor args to bypass bot detection
-    extractorArgs: 'youtube:player_client=android,web;player_skip=webpage,configs',
     // Retry options
     retries: 3,
     fragmentRetries: 3,
-    skipUnavailableFragments: true,
-    // Use OAuth2 to bypass restrictions
-    username: 'oauth2',
-    password: ''
+    skipUnavailableFragments: true
   };
 
-  // Add cookies if provided
+  // Add cookies if provided (optional)
   if (process.env.YOUTUBE_COOKIES) {
     options.cookies = process.env.YOUTUBE_COOKIES;
   }
@@ -44,52 +34,27 @@ const getCommonOptions = () => {
  * Get video information without downloading
  */
 export const getVideoInfo = async (url) => {
-  // Try multiple methods to get video info
-  const methods = [
-    // Method 1: Android client (most reliable)
-    {
+  try {
+    console.log('🔍 Fetching video info using Android client...');
+
+    const options = {
       ...getCommonOptions(),
       dumpSingleJson: true,
       extractorArgs: 'youtube:player_client=android'
-    },
-    // Method 2: iOS client
-    {
-      ...getCommonOptions(),
-      dumpSingleJson: true,
-      extractorArgs: 'youtube:player_client=ios',
-      addHeader: [
-        'user-agent:com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)'
-      ]
-    },
-    // Method 3: Web client with embed
-    {
-      ...getCommonOptions(),
-      dumpSingleJson: true,
-      extractorArgs: 'youtube:player_client=web;player_skip=configs'
-    }
-  ];
+    };
 
-  for (let i = 0; i < methods.length; i++) {
-    try {
-      console.log(`🔍 Fetching video info (method ${i + 1})...`);
-      const info = await youtubedl(url, methods[i]);
+    const info = await youtubedl(url, options);
 
-      return {
-        title: info.title,
-        duration: formatDuration(info.duration),
-        channel: info.uploader || info.channel || info.uploader_id,
-        thumbnail: info.thumbnail,
-        videoId: info.id
-      };
-    } catch (error) {
-      console.error(`❌ Method ${i + 1} failed:`, error.message);
-      if (i === methods.length - 1) {
-        // Last method failed
-        throw new Error(`Failed to fetch video info: ${error.message}`);
-      }
-      // Try next method
-      continue;
-    }
+    return {
+      title: info.title,
+      duration: formatDuration(info.duration),
+      channel: info.uploader || info.channel || info.uploader_id,
+      thumbnail: info.thumbnail,
+      videoId: info.id
+    };
+  } catch (error) {
+    console.error('❌ Video info error:', error.message);
+    throw new Error(`Failed to fetch video info: ${error.message}`);
   }
 };
 
@@ -118,56 +83,26 @@ export const downloadYouTubeVideo = async (url, type = 'video') => {
 
     console.log(`⬇️  Starting download: ${title}`);
 
-    // Try multiple download methods
-    const downloadMethods = [
-      // Method 1: Android client (most reliable for bypassing bot detection)
-      {
-        ...getCommonOptions(),
-        output: outputTemplate + '.%(ext)s',
-        ffmpegLocation: ffmpegPath,
-        extractorArgs: 'youtube:player_client=android',
-        format: type === 'audio' ? 'bestaudio' : 'best[ext=mp4]/mp4',
-        extractAudio: type === 'audio',
-        audioFormat: type === 'audio' ? 'mp3' : undefined,
-        audioQuality: type === 'audio' ? 0 : undefined,
-        mergeOutputFormat: type === 'video' ? 'mp4' : undefined
-      },
-      // Method 2: iOS client fallback
-      {
-        ...getCommonOptions(),
-        output: outputTemplate + '.%(ext)s',
-        ffmpegLocation: ffmpegPath,
-        extractorArgs: 'youtube:player_client=ios',
-        format: type === 'audio' ? 'bestaudio' : 'best[ext=mp4]/mp4',
-        extractAudio: type === 'audio',
-        audioFormat: type === 'audio' ? 'mp3' : undefined,
-        audioQuality: type === 'audio' ? 0 : undefined,
-        mergeOutputFormat: type === 'video' ? 'mp4' : undefined,
-        addHeader: [
-          'user-agent:com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)'
-        ]
-      }
-    ];
+    // Configure download options using Android client
+    const downloadOptions = {
+      ...getCommonOptions(),
+      output: outputTemplate + '.%(ext)s',
+      ffmpegLocation: ffmpegPath,
+      extractorArgs: 'youtube:player_client=android'
+    };
 
-    // Try download methods
-    let downloadSuccess = false;
-    for (let i = 0; i < downloadMethods.length; i++) {
-      try {
-        console.log(`📥 Attempting download method ${i + 1}...`);
-        await youtubedl(url, downloadMethods[i]);
-        downloadSuccess = true;
-        break;
-      } catch (error) {
-        console.error(`❌ Download method ${i + 1} failed:`, error.message);
-        if (i === downloadMethods.length - 1) {
-          throw error;
-        }
-      }
+    if (type === 'audio') {
+      downloadOptions.extractAudio = true;
+      downloadOptions.audioFormat = 'mp3';
+      downloadOptions.audioQuality = 0;
+      downloadOptions.format = 'bestaudio';
+    } else {
+      downloadOptions.format = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/mp4';
+      downloadOptions.mergeOutputFormat = 'mp4';
     }
 
-    if (!downloadSuccess) {
-      throw new Error('All download methods failed');
-    }
+    // Download the video
+    await youtubedl(url, downloadOptions);
 
     // Find the downloaded file
     const files = fs.readdirSync(downloadsDir);
