@@ -21,7 +21,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "youtube-dl-exec": "^3.0.7",
+    "youtube-dl-exec": "^3.0.10",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",

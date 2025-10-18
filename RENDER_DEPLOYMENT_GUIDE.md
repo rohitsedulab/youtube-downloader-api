@@ -163,6 +163,7 @@ Render will automatically detect and redeploy! 🎉
 - Check if ffmpeg is installed (Render installs it automatically)
 - Verify the video is public/unlisted
 - Check logs for specific errors
+- For age-restricted videos, see COOKIE_SETUP.md for optional cookie configuration
 
 **Slow first request:**
 - This is normal for free tier (cold start)

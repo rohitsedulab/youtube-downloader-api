@@ -13,3 +13,7 @@ services:
         value: 10000
       - key: YTDL_NO_UPDATE
         value: 1
+      - key: NODE_ENV
+        value: production
+      - key: YOUTUBE_COOKIES
+        value: ""
