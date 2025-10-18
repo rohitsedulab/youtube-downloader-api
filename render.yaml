@@ -15,5 +15,7 @@ services:
         value: 1
       - key: NODE_ENV
         value: production
+      - key: USE_IPV6
+        value: "true"
       - key: YOUTUBE_COOKIES
         value: ""

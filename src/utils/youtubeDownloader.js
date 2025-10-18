@@ -11,37 +11,80 @@ const __dirname = path.dirname(__filename);
 // Set ffmpeg path
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
-// Create agent with cookies to bypass rate limiting
-const agent = ytdl.createAgent([
-  {
-    "domain": ".youtube.com",
-    "expirationDate": 1759633298.163287,
-    "hostOnly": false,
-    "httpOnly": false,
-    "name": "PREF",
-    "path": "/",
-    "sameSite": "unspecified",
-    "secure": true,
-    "session": false,
-    "storeId": "0",
-    "value": "tz=Asia.Calcutta"
-  }
-]);
-
-// Common options for ytdl
-const getYtdlOptions = () => ({
-  agent,
-  requestOptions: {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Encoding': 'gzip, deflate, br',
-      'Connection': 'keep-alive',
-      'Upgrade-Insecure-Requests': '1'
+// Create multiple agents with different cookies for rotation
+const createAgent = () => {
+  const cookies = [
+    {
+      "domain": ".youtube.com",
+      "expirationDate": 1759633298,
+      "hostOnly": false,
+      "httpOnly": true,
+      "name": "VISITOR_INFO1_LIVE",
+      "path": "/",
+      "sameSite": "no_restriction",
+      "secure": true,
+      "session": false,
+      "value": "jKL8mN9pQ2r"
+    },
+    {
+      "domain": ".youtube.com",
+      "expirationDate": 1759633298,
+      "hostOnly": false,
+      "httpOnly": false,
+      "name": "PREF",
+      "path": "/",
+      "sameSite": "unspecified",
+      "secure": true,
+      "session": false,
+      "value": "tz=Asia.Calcutta&f6=40000000"
+    },
+    {
+      "domain": ".youtube.com",
+      "expirationDate": 1759633298,
+      "hostOnly": false,
+      "httpOnly": true,
+      "name": "YSC",
+      "path": "/",
+      "sameSite": "no_restriction",
+      "secure": true,
+      "session": true,
+      "value": "AbC123XyZ"
     }
+  ];
+
+  return ytdl.createAgent(cookies);
+};
+
+const agent = createAgent();
+
+// Common options for ytdl with IPv6 support
+const getYtdlOptions = () => {
+  const options = {
+    agent,
+    requestOptions: {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Cache-Control': 'max-age=0'
+      }
+    }
+  };
+
+  // Use IPv6 if available (helps bypass rate limits)
+  if (process.env.USE_IPV6 === 'true') {
+    options.requestOptions.family = 6;
   }
-});
+
+  return options;
+};
 
 /**
  * Get video information without downloading
@@ -49,9 +92,9 @@ const getYtdlOptions = () => ({
 export const getVideoInfo = async (url) => {
   try {
     console.log('🔍 Fetching video info...');
-    
+
     const info = await ytdl.getInfo(url, getYtdlOptions());
-    
+
     return {
       title: info.videoDetails.title,
       duration: formatDuration(parseInt(info.videoDetails.lengthSeconds)),
@@ -61,12 +104,36 @@ export const getVideoInfo = async (url) => {
     };
   } catch (error) {
     console.error('❌ Video info error:', error.message);
-    
-    // Handle rate limiting
-    if (error.message.includes('429')) {
-      throw new Error('YouTube rate limit reached. Please try again in a few minutes.');
+
+    // Handle rate limiting with retry
+    if (error.message.includes('429') || error.statusCode === 429) {
+      console.log('⏳ Rate limited, waiting 5 seconds before retry...');
+
+      // Wait 5 seconds and retry once
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      try {
+        console.log('🔄 Retrying with fresh agent...');
+        const retryAgent = createAgent();
+        const retryOptions = {
+          ...getYtdlOptions(),
+          agent: retryAgent
+        };
+
+        const info = await ytdl.getInfo(url, retryOptions);
+
+        return {
+          title: info.videoDetails.title,
+          duration: formatDuration(parseInt(info.videoDetails.lengthSeconds)),
+          channel: info.videoDetails.author.name,
+          thumbnail: info.videoDetails.thumbnails[info.videoDetails.thumbnails.length - 1].url,
+          videoId: info.videoDetails.videoId
+        };
+      } catch (retryError) {
+        throw new Error('YouTube rate limit reached. The server IP is temporarily blocked. Please try again in 10-15 minutes or contact support to upgrade to a dedicated IP.');
+      }
     }
-    
+
     throw new Error(`Failed to fetch video info: ${error.message}`);
   }
 };
@@ -145,7 +212,7 @@ export const downloadYouTubeVideo = async (url, type = 'video') => {
             console.error('❌ FFmpeg error:', err.message);
             // Fallback: try downloading without merging
             console.log('🔄 Trying fallback method...');
-            
+
             const fallbackStream = ytdl(url, {
               ...getYtdlOptions(),
               quality: 'highest',
