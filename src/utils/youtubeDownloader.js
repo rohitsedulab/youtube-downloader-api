@@ -19,7 +19,13 @@ export const getVideoInfo = async (url) => {
       dumpSingleJson: true,
       noWarnings: true,
       noCheckCertificates: true,
-      preferFreeFormats: true
+      preferFreeFormats: true,
+      addHeader: [
+        'referer:youtube.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'accept-language:en-US,en;q=0.9'
+      ],
+      extractor_args: 'youtube:player_client=android,web'
     };
 
     const info = await youtubedl(url, options);
@@ -49,7 +55,13 @@ export const downloadYouTubeVideo = async (url, type = 'video') => {
       dumpSingleJson: true,
       noWarnings: true,
       noCheckCertificates: true,
-      preferFreeFormats: true
+      preferFreeFormats: true,
+      addHeader: [
+        'referer:youtube.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'accept-language:en-US,en;q=0.9'
+      ],
+      extractor_args: 'youtube:player_client=android,web'
     };
 
     const info = await youtubedl(url, infoOptions);
@@ -78,8 +90,10 @@ export const downloadYouTubeVideo = async (url, type = 'video') => {
       preferFreeFormats: true,
       addHeader: [
         'referer:youtube.com',
-        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'accept-language:en-US,en;q=0.9'
       ],
+      extractor_args: 'youtube:player_client=android,web',
       // Use installed ffmpeg for merging
       ffmpegLocation: ffmpegPath
     };
