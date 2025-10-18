@@ -1,4 +1,5 @@
-import youtubedl from 'youtube-dl-exec';
+import ytdl from '@distube/ytdl-core';
+import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import fs from 'fs';
 import path from 'path';
@@ -7,50 +8,24 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Get ffmpeg path
-const ffmpegPath = ffmpegInstaller.path;
-
-// Common options for all youtube-dl operations
-const getCommonOptions = () => {
-  const options = {
-    noWarnings: true,
-    noCheckCertificates: true,
-    preferFreeFormats: true,
-    // Retry options
-    retries: 3,
-    fragmentRetries: 3,
-    skipUnavailableFragments: true
-  };
-
-  // Add cookies if provided (optional)
-  if (process.env.YOUTUBE_COOKIES) {
-    options.cookies = process.env.YOUTUBE_COOKIES;
-  }
-
-  return options;
-};
+// Set ffmpeg path
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 /**
  * Get video information without downloading
  */
 export const getVideoInfo = async (url) => {
   try {
-    console.log('🔍 Fetching video info using Android client...');
-
-    const options = {
-      ...getCommonOptions(),
-      dumpSingleJson: true,
-      extractorArgs: 'youtube:player_client=android'
-    };
-
-    const info = await youtubedl(url, options);
-
+    console.log('🔍 Fetching video info...');
+    
+    const info = await ytdl.getInfo(url);
+    
     return {
-      title: info.title,
-      duration: formatDuration(info.duration),
-      channel: info.uploader || info.channel || info.uploader_id,
-      thumbnail: info.thumbnail,
-      videoId: info.id
+      title: info.videoDetails.title,
+      duration: formatDuration(parseInt(info.videoDetails.lengthSeconds)),
+      channel: info.videoDetails.author.name,
+      thumbnail: info.videoDetails.thumbnails[info.videoDetails.thumbnails.length - 1].url,
+      videoId: info.videoDetails.videoId
     };
   } catch (error) {
     console.error('❌ Video info error:', error.message);
@@ -66,7 +41,7 @@ export const getVideoInfo = async (url) => {
  */
 export const downloadYouTubeVideo = async (url, type = 'video') => {
   try {
-    // Get video info first with enhanced options
+    // Get video info first
     const info = await getVideoInfo(url);
     const title = sanitizeFilename(info.title);
 
@@ -79,58 +54,89 @@ export const downloadYouTubeVideo = async (url, type = 'video') => {
     // Generate filename
     const timestamp = Date.now();
     const extension = type === 'audio' ? 'mp3' : 'mp4';
-    const outputTemplate = path.join(downloadsDir, `${title}-${timestamp}`);
+    const filename = `${title}-${timestamp}.${extension}`;
+    const filePath = path.join(downloadsDir, filename);
 
     console.log(`⬇️  Starting download: ${title}`);
 
-    // Configure download options using Android client
-    const downloadOptions = {
-      ...getCommonOptions(),
-      output: outputTemplate + '.%(ext)s',
-      ffmpegLocation: ffmpegPath,
-      extractorArgs: 'youtube:player_client=android'
-    };
+    return new Promise((resolve, reject) => {
+      if (type === 'audio') {
+        // Download audio only
+        const audioStream = ytdl(url, {
+          quality: 'highestaudio',
+          filter: 'audioonly'
+        });
 
-    if (type === 'audio') {
-      downloadOptions.extractAudio = true;
-      downloadOptions.audioFormat = 'mp3';
-      downloadOptions.audioQuality = 0;
-      downloadOptions.format = 'bestaudio';
-    } else {
-      downloadOptions.format = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/mp4';
-      downloadOptions.mergeOutputFormat = 'mp4';
-    }
+        ffmpeg(audioStream)
+          .audioBitrate(128)
+          .save(filePath)
+          .on('end', () => {
+            console.log(`✅ Download complete: ${filename}`);
+            resolve(filePath);
+          })
+          .on('error', (err) => {
+            console.error('❌ FFmpeg error:', err.message);
+            reject(new Error(`Audio conversion failed: ${err.message}`));
+          });
+      } else {
+        // Download video with audio
+        const videoStream = ytdl(url, {
+          quality: 'highestvideo',
+          filter: format => format.container === 'mp4'
+        });
 
-    // Download the video
-    await youtubedl(url, downloadOptions);
+        const audioStream = ytdl(url, {
+          quality: 'highestaudio',
+          filter: 'audioonly'
+        });
 
-    // Find the downloaded file
-    const files = fs.readdirSync(downloadsDir);
-    const downloadedFile = files.find(file =>
-      file.startsWith(`${title}-${timestamp}`) &&
-      (file.endsWith('.mp4') || file.endsWith('.mp3') || file.endsWith('.m4a'))
-    );
+        ffmpeg()
+          .input(videoStream)
+          .input(audioStream)
+          .videoCodec('copy')
+          .audioCodec('aac')
+          .save(filePath)
+          .on('end', () => {
+            console.log(`✅ Download complete: ${filename}`);
+            resolve(filePath);
+          })
+          .on('error', (err) => {
+            console.error('❌ FFmpeg error:', err.message);
+            // Fallback: try downloading without merging
+            console.log('🔄 Trying fallback method...');
+            
+            const fallbackStream = ytdl(url, {
+              quality: 'highest',
+              filter: format => format.container === 'mp4' && format.hasVideo && format.hasAudio
+            });
 
-    if (!downloadedFile) {
-      throw new Error('Downloaded file not found after successful download');
-    }
+            const writeStream = fs.createWriteStream(filePath);
+            fallbackStream.pipe(writeStream);
 
-    const filePath = path.join(downloadsDir, downloadedFile);
-    console.log(`✅ Download complete: ${downloadedFile}`);
+            writeStream.on('finish', () => {
+              console.log(`✅ Download complete (fallback): ${filename}`);
+              resolve(filePath);
+            });
 
-    return filePath;
+            writeStream.on('error', (writeErr) => {
+              console.error('❌ Write error:', writeErr.message);
+              reject(new Error(`Download failed: ${writeErr.message}`));
+            });
+          });
+      }
+    });
 
   } catch (error) {
     console.error('❌ Download error:', error.message);
 
     // Provide more specific error messages
-    if (error.message.includes('Sign in to confirm your age')) {
+    if (error.message.includes('age')) {
       throw new Error('Video is age-restricted and requires authentication');
-    } else if (error.message.includes('Private video')) {
+    } else if (error.message.includes('private')) {
       throw new Error('Video is private and cannot be downloaded');
-    } else if (error.message.includes('Video unavailable')) {
+    } else if (error.message.includes('unavailable')) {
       throw new Error('Video is unavailable or has been removed');
-    } else if (error.message.includes('This video is not available')) {
+    } else if (error.message.includes('not available')) {
       throw new Error('Video is not available in your region');
     }
 
@@ -162,15 +168,4 @@ const formatDuration = (seconds) => {
     return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
   return `${mins}:${secs.toString().padStart(2, '0')}`;
-};
-
-/**
- * Format bytes to readable format
- */
-const formatBytes = (bytes) => {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
 };

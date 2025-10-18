@@ -148,7 +148,9 @@ curl -X POST http://localhost:3000/api/download -H "Content-Type: application/js
 ## 🛠️ Technologies Used
 
 - **Express.js** - Web framework
-- **ytdl-core** - YouTube video downloader
+- **@distube/ytdl-core** - YouTube video downloader (handles bot detection)
+- **fluent-ffmpeg** - Video/audio processing
+- **@ffmpeg-installer/ffmpeg** - FFmpeg binary
 - **dotenv** - Environment variables
 - **cors** - Cross-origin resource sharing
 - **node-cron** - Scheduled tasks for cleanup
