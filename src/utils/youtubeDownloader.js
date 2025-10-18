@@ -23,7 +23,9 @@ export const getVideoInfo = async (url) => {
       addHeader: [
         'referer:youtube.com',
         'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      ]
+      ],
+      // Use extractor args to bypass bot detection
+      extractorArgs: 'youtube:player_client=android,web'
     };
 
     const info = await youtubedl(url, options);
@@ -74,6 +76,8 @@ export const downloadYouTubeVideo = async (url, type = 'video') => {
         'referer:youtube.com',
         'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       ],
+      // Use extractor args to bypass bot detection
+      extractorArgs: 'youtube:player_client=android,web',
       ffmpegLocation: ffmpegPath
     };
 
