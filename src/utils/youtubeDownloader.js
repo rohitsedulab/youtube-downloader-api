@@ -26,6 +26,12 @@ export const getVideoInfo = async (url) => {
       ]
     };
 
+    // Add proxy if available
+    if (process.env.PROXY_URL) {
+      options.proxy = process.env.PROXY_URL;
+      console.log('🔄 Using proxy for request');
+    }
+
     const info = await youtubedl(url, options);
     
     return {
@@ -76,6 +82,12 @@ export const downloadYouTubeVideo = async (url, type = 'video') => {
       ],
       ffmpegLocation: ffmpegPath
     };
+
+    // Add proxy if available
+    if (process.env.PROXY_URL) {
+      downloadOptions.proxy = process.env.PROXY_URL;
+      console.log('🔄 Using proxy for download');
+    }
 
     if (type === 'audio') {
       downloadOptions.extractAudio = true;
