@@ -1,0 +1,7 @@
+node_modules/
+.env
+downloads/
+*.log
+.DS_Store
+1760700084821-player-script.js
+1760700084795-player-script.js
