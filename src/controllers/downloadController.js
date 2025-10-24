@@ -90,6 +90,95 @@ export const downloadVideo = async (req, res) => {
 };
 
 /**
+ * Controller to get list of all downloaded files
+ */
+export const listFiles = (req, res) => {
+  try {
+    const downloadsDir = path.join(__dirname, '../../downloads');
+    
+    // Check if downloads directory exists
+    if (!fs.existsSync(downloadsDir)) {
+      return res.json({
+        success: true,
+        files: [],
+        count: 0
+      });
+    }
+
+    // Get all files
+    const files = fs.readdirSync(downloadsDir);
+    
+    // Get file details
+    const fileDetails = files.map(file => {
+      const filePath = path.join(downloadsDir, file);
+      const stats = fs.statSync(filePath);
+      return {
+        name: file,
+        size: stats.size,
+        created: stats.birthtime,
+        modified: stats.mtime
+      };
+    });
+
+    res.json({
+      success: true,
+      files: fileDetails,
+      count: fileDetails.length
+    });
+
+  } catch (error) {
+    console.error('❌ List files error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to list files: ' + error.message
+    });
+  }
+};
+
+/**
+ * Controller to delete all downloaded files
+ */
+export const deleteAllFiles = (req, res) => {
+  try {
+    const downloadsDir = path.join(__dirname, '../../downloads');
+    
+    // Check if downloads directory exists
+    if (!fs.existsSync(downloadsDir)) {
+      return res.json({
+        success: true,
+        message: 'No files to delete',
+        deletedCount: 0
+      });
+    }
+
+    // Get all files
+    const files = fs.readdirSync(downloadsDir);
+    let deletedCount = 0;
+
+    // Delete each file
+    files.forEach(file => {
+      const filePath = path.join(downloadsDir, file);
+      fs.unlinkSync(filePath);
+      deletedCount++;
+      console.log(`🗑️  Deleted: ${file}`);
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully deleted ${deletedCount} file(s)`,
+      deletedCount: deletedCount
+    });
+
+  } catch (error) {
+    console.error('❌ Delete files error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete files: ' + error.message
+    });
+  }
+};
+
+/**
  * Controller to serve downloaded files
  */
 export const serveFile = (req, res) => {
