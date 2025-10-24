@@ -29,7 +29,7 @@ app.use('/api/download', downloadRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', message: 'YouTube Downloader API is running' });
+  res.json({ status: 'OK', message: 'Rohit Your REST Api is Working' });
 });
 
 // Root endpoint

@@ -95,7 +95,7 @@ export const downloadYouTubeVideo = async (url, type = 'video') => {
       downloadOptions.audioQuality = 0;
       downloadOptions.format = 'bestaudio';
     } else {
-      downloadOptions.format = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/mp4';
+      downloadOptions.format = 'worst[ext=mp4]/worst';
       downloadOptions.mergeOutputFormat = 'mp4';
     }
 
